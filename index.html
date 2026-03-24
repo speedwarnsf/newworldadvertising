@@ -129,5 +129,105 @@
     </a>
 
   </div>
+
+  <script>
+    /**
+     * typeset.us — Standalone typographic refinement
+     * Ported from room.institute's compositor engine
+     *
+     * Rules:
+     * 1. No orphans — last line must have at least 2 words
+     * 2. No widows — short words (a, an, the, of, in, to, at, by, on, or, is, it, if, no, so, as) never end a line
+     * 3. Compound hyphen protection — "human-centric" stays together
+     * 4. Opening/closing punctuation binding
+     * 5. text-wrap: balance on headings
+     */
+    (function() {
+      const NBSP = '\u00A0';
+      const NBHY = '\u2011';
+
+      const SHORT_WORDS = new Set(
+        'a an the of in to at by on or is it if no so as we do be for and but nor'.split(' ')
+      );
+
+      function typesetText(text) {
+        if (!text || text.length < 10) return text;
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length < 3) return text;
+
+        const result = [];
+        for (let i = 0; i < words.length; i++) {
+          let word = words[i];
+
+          // Compound hyphen protection
+          if (word.length <= 20 && word.indexOf('-') > 0 && word.indexOf('-') < word.length - 1) {
+            word = word.replace(/-/g, NBHY);
+          }
+
+          const nextWord = i < words.length - 1 ? words[i + 1] : null;
+
+          // Opening punctuation: bind to next word
+          if (nextWord && /^[\(\[\{\u201C\u2018]$/.test(word)) {
+            result.push(word + NBSP + words[i + 1]);
+            i++;
+            continue;
+          }
+
+          // Closing punctuation: bind to previous word
+          if (result.length > 0 && /^[\)\]\}\.,;:!?\u201D\u2019%]/.test(word)) {
+            result.push(result.pop() + NBSP + word);
+            continue;
+          }
+
+          // Short word protection: bind to next word so it doesn't end a line alone
+          if (nextWord && SHORT_WORDS.has(word.toLowerCase())) {
+            result.push(word + NBSP + words[i + 1]);
+            i++;
+            continue;
+          }
+
+          // Orphan prevention: bind last two words
+          if (i === words.length - 2 && nextWord) {
+            result.push(word + NBSP + words[i + 1]);
+            i++;
+            continue;
+          }
+
+          result.push(word);
+        }
+
+        return result.join(' ');
+      }
+
+      function processElement(el) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        const textNodes = [];
+        let node;
+        while ((node = walker.nextNode())) textNodes.push(node);
+
+        for (const textNode of textNodes) {
+          const original = textNode.textContent;
+          if (!original || original.trim().length < 10) continue;
+          const leading = original.match(/^\s*/)[0];
+          const trailing = original.match(/\s*$/)[0];
+          textNode.textContent = leading + typesetText(original.trim()) + trailing;
+        }
+      }
+
+      // Apply on load
+      document.addEventListener('DOMContentLoaded', function() {
+        // Headings: use text-wrap balance
+        document.querySelectorAll('h1, h2, h3, .subhead').forEach(function(el) {
+          el.style.textWrap = 'balance';
+          processElement(el);
+        });
+
+        // Body text
+        document.querySelectorAll('.body-text, .example-item, .cta').forEach(function(el) {
+          processElement(el);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
